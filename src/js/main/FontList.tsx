@@ -23,7 +23,7 @@ export const FontList = ({ fonts, onInstall, onFindOnline }: Props) => {
         <div className="font-row" key={`${font.name}-${idx}`}>
           <div className="font-info">
             <div className="font-name" title={font.name}>
-              {font.name}
+              {font.name.replace(/([a-z])([A-Z])/g, "$1 $2")}
               {font.style ? <span className="font-style"> {font.style}</span> : null}
             </div>
             {font.locations.length > 0 && (

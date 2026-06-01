@@ -1,7 +1,5 @@
 import { csi } from "./bolt";
 
-// Use navigator.platform instead of Node.js os module to avoid require("crypto") and other
-// Node built-ins being pulled into the bundle (node.ts fires require() for all of them at load time).
 const os = { platform: () => (navigator.platform.toLowerCase().includes("mac") ? "darwin" : "win32") };
 
 /**

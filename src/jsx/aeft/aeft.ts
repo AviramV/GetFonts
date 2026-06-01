@@ -200,36 +200,6 @@ export const writeTempFont = (
 };
 
 /**
- * Launch the local font-install server (dist/cep/server/server.cjs) as a background process.
- * If the port is already bound (server already running) the new process exits quietly.
- * Returns ok:false only if we can't determine the script path.
- */
-export const startFontServer = (): { ok: boolean; error?: string } => {
-  try {
-    //@ts-ignore
-    const isWin = String($.os).toLowerCase().indexOf("win") > -1;
-    // $.fileName is the path to the running jsx/index.js inside dist/cep/jsx/
-    //@ts-ignore
-    const jsxDir = File($.fileName).parent.fsName as string;
-    const serverPath = isWin
-      ? jsxDir.replace(/jsx$/, "server") + "\\server.cjs"
-      : jsxDir.replace(/jsx$/, "server") + "/server.cjs";
-    //@ts-ignore
-    if (!new File(serverPath).exists) {
-      return { ok: false, error: `server.cjs not found at ${serverPath}` };
-    }
-    if (isWin) {
-      system.callSystem(`start /B node "${serverPath}"`);
-    } else {
-      system.callSystem(`nohup node "${serverPath}" &`);
-    }
-    return { ok: true };
-  } catch (e: any) {
-    return { ok: false, error: String(e.message || e) };
-  }
-};
-
-/**
  * Open the AE "Find Missing Fonts" dialog (command 4003).
  * Fire-and-forget — returns no data. Used as a UX convenience button.
  */

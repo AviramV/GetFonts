@@ -13,7 +13,7 @@ const config: CEP_Config = {
   requiredRuntimeVersion: 9.0,
   hosts: [{ name: "AEFT", version: "[17.0,99.9]" }],
   type: "Panel",
-  parameters: ["--v=0", "--mixed-context"],
+  parameters: ["--v=0", "--mixed-context", "--enable-nodejs"],
   width: 340,
   height: 600,
   panels: [

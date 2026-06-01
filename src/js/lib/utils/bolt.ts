@@ -2,9 +2,6 @@ import CSInterface, { CSEvent } from "../cep/csinterface";
 import Vulcan, { VulcanMessage } from "../cep/vulcan";
 import { ns } from "../../../shared/shared";
 
-// Stub out Node.js fs — we don't use initBolt() and the manifest ScriptPath loads JSX automatically.
-// Avoids importing node.ts which calls require("crypto") and other Node built-ins at module level,
-// which crash in CEP panels that don't have --enable-nodejs.
 const fs = { existsSync: (_path: string) => false };
 
 

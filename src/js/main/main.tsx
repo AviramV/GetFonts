@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { evalTS, openLinkInBrowser, subscribeBackgroundColor } from "../lib/utils/bolt";
+import { csi, evalTS, openLinkInBrowser, subscribeBackgroundColor } from "../lib/utils/bolt";
 import type { MissingFont } from "../../shared/types";
 import { FontList } from "./FontList";
 import { Tooltip } from "./Tooltip";
@@ -18,6 +18,19 @@ export const App = () => {
   useEffect(() => {
     if (window.cep) {
       subscribeBackgroundColor(setBgColor);
+      // Boot the font install server using CEP's built-in Node.js engine.
+      // require() runs the server script in-process — no system Node.js needed.
+      const req = (window as any).require as NodeRequire | undefined;
+      if (req) {
+        try {
+          const nodePath = req("path") as typeof import("path");
+          const extRoot = csi.getSystemPath("extension") as string;
+          const serverPath = nodePath.join(extRoot, "server", "server.cjs");
+          req(serverPath);
+        } catch (e) {
+          console.error("Font server boot failed:", e);
+        }
+      }
     }
   }, []);
 
@@ -73,25 +86,18 @@ export const App = () => {
     updateFontStatus(idx, "installing");
     try {
       const humanName = font.name.replace(/([a-z])([A-Z])/g, "$1 $2");
-
-      // Ensure the local helper server is running (no-op if already up)
-      await evalTS("startFontServer");
-      // Give it a moment to bind if it was just launched
-      await new Promise<void>((r) => setTimeout(r, 800));
-
       const res = await fetch(
         `http://localhost:7762/install?family=${encodeURIComponent(humanName)}&style=${encodeURIComponent(font.style || "")}`
       );
       const data: { ok: boolean; path?: string; error?: string } = await res.json();
       if (!data.ok || !data.path) throw new Error(data.error || "Install failed");
-
       const openResult = await evalTS("openFontFile", data.path);
       if (!openResult.ok) throw new Error(openResult.error);
-
       updateFontStatus(idx, "installed");
       setStatus(`${font.name} — installer launched. Scan again after installing.`);
-    } catch {
+    } catch (e) {
       updateFontStatus(idx, "missing");
+      setStatus(`Install failed: ${String(e)}`);
       findOnline(font.name);
     }
   };

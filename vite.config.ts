@@ -102,7 +102,6 @@ function fixManifestIcons(outDir: string): Plugin {
   };
 }
 
-// Copy server.cjs into the CEP bundle so ExtendScript can locate and launch it at runtime.
 function copyServer(outDir: string): Plugin {
   return {
     name: "copy-server",

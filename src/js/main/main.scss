@@ -1,0 +1,249 @@
+:root {
+  --bg: #1e1e1e;
+  --bg-panel: #2a2a2a;
+  --bg-row: #303030;
+  --bg-row-alt: #272727;
+  --border: #3a3a3a;
+  --accent: #4a90d9;
+  --text: #d4d4d4;
+  --text-muted: #888;
+  --radius: 4px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", "SF Pro Text", Arial, sans-serif;
+  font-size: 12px;
+  overflow: hidden;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app-header {
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+
+  h1 {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+
+  .subtitle {
+    color: var(--text-muted);
+    font-size: 11px;
+    margin-top: 2px;
+  }
+}
+
+.toolbar {
+  display: flex;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.btn {
+  padding: 5px 10px;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: opacity 0.15s;
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  &:not(:disabled):hover {
+    opacity: 0.85;
+  }
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  flex: 1;
+}
+
+.btn-secondary {
+  background: var(--bg-panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  flex: 1;
+}
+
+.btn-icon {
+  background: var(--bg-panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 5px 8px;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.status-bar {
+  padding: 4px 12px;
+  min-height: 22px;
+  font-size: 11px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.empty-state {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  line-height: 1.7;
+}
+
+.font-list {
+  flex: 1;
+  overflow-y: auto;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+  &::-webkit-scrollbar-track {
+    background: var(--bg);
+  }
+  &::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 3px;
+  }
+}
+
+.font-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+
+  &:nth-child(even) {
+    background: var(--bg-row-alt);
+  }
+
+  &:hover {
+    background: var(--bg-row);
+  }
+}
+
+.font-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.font-name {
+  font-weight: 600;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.font-style {
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.font-locations {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.badge {
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  flex-shrink: 0;
+
+  &.badge-missing {
+    background: #4a1a1a;
+    color: #e88;
+  }
+
+  &.badge-installing {
+    background: #3a3a1a;
+    color: #dd8;
+  }
+
+  &.badge-installed {
+    background: #1a3a1a;
+    color: #8d8;
+  }
+}
+
+.font-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.btn-action {
+  padding: 4px 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 11px;
+  transition: background 0.15s, border-color 0.15s;
+
+  &:hover:not(:disabled) {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+
+  &:disabled,
+  &.installing {
+    opacity: 0.5;
+    cursor: default;
+  }
+}
+
+// ─── Tooltips ───────────────────────────────────────────────────────────────
+// Rendered via React portal (Tooltip.tsx) into document.body with position:fixed,
+// so they're never clipped by overflow containers.
+
+.tooltip-popup {
+  position: fixed;
+  background: #111;
+  color: #e0e0e0;
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  border: 1px solid #444;
+  pointer-events: none;
+  z-index: 9999;
+  white-space: normal;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}

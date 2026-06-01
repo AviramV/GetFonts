@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 
 type Props = {
@@ -30,6 +30,24 @@ export const Tooltip = ({ text, pos = "top", children }: Props) => {
     if (timerRef.current) clearTimeout(timerRef.current);
     setAnchor(null);
   };
+
+  // Fallback: CEP's Chromium sometimes skips onMouseLeave when the cursor moves fast.
+  // Watch mousemove on document and dismiss as soon as the cursor leaves the anchor rect.
+  useEffect(() => {
+    if (!anchor) return;
+    const onMove = (e: MouseEvent) => {
+      if (
+        e.clientX < anchor.left ||
+        e.clientX > anchor.right ||
+        e.clientY < anchor.top ||
+        e.clientY > anchor.bottom
+      ) {
+        hide();
+      }
+    };
+    document.addEventListener("mousemove", onMove);
+    return () => document.removeEventListener("mousemove", onMove);
+  }, [anchor]);
 
   // Inject handlers directly onto the child — preserves any existing handlers
   const existingProps = children.props as Record<string, unknown>;

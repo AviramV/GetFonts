@@ -182,6 +182,12 @@ async function bestFontUrl(fontName: string): Promise<string> {
     return googleSearch; // network error — open search as fallback
   }
 
-  // Not on Google Fonts → try Adobe Fonts. If that 404s, the Adobe Fonts search bar is right there.
-  return adobeFonts;
+  // Not on Google Fonts → probe Adobe Fonts
+  try {
+    const adobeRes = await fetch(adobeFonts, { method: "HEAD" });
+    if (adobeRes.ok) return adobeFonts;
+  } catch { /* fall through */ }
+
+  // Neither service has it → Google search
+  return googleSearch;
 }

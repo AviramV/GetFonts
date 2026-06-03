@@ -3,6 +3,8 @@ import { csi, evalTS, openLinkInBrowser, subscribeBackgroundColor } from "../lib
 import type { MissingFont } from "../../shared/types";
 import { FontList } from "./FontList";
 import { Tooltip } from "./Tooltip";
+import { UpdateBanner } from "./UpdateBanner";
+import { useUpdateCheck } from "./useUpdateCheck";
 import "./main.scss";
 
 export type FontStatus = "missing" | "installing" | "installed";
@@ -14,6 +16,7 @@ export const App = () => {
   const [fonts, setFonts] = useState<FontItem[]>([]);
   const [status, setStatus] = useState("Click 'Scan Project' to begin.");
   const [scanning, setScanning] = useState(false);
+  const update = useUpdateCheck();
 
   useEffect(() => {
     if (window.cep) {
@@ -114,6 +117,8 @@ export const App = () => {
         <h1>Get Fonts</h1>
         <p className="subtitle">Detect and install missing fonts in your project</p>
       </header>
+
+      {update.updateAvailable && <UpdateBanner info={update} />}
 
       <div className="toolbar">
         <Tooltip text="Scan all compositions for missing or substituted fonts" pos="bottom">

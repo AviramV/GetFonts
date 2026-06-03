@@ -62,33 +62,74 @@ async function installFont(fontName, fontStyle) {
   return { ok: true, path: outPath };
 }
 
+// Download a release .zxp asset to ~/Downloads for assisted update install.
+// The url comes from the GitHub Releases API (data.assets[].browser_download_url),
+// which 302-redirects to S3 — httpsGet already follows redirects.
+async function downloadUpdate(assetUrl, version) {
+  let parsed;
+  try {
+    parsed = new URL(assetUrl);
+  } catch (_) {
+    throw new Error("Invalid download URL");
+  }
+  // Only allow GitHub-hosted assets (the redirect chain lands on objects.githubusercontent.com).
+  if (parsed.protocol !== "https:" || !/(^|\.)github(usercontent)?\.com$/.test(parsed.hostname)) {
+    throw new Error("Refusing to download from a non-GitHub host");
+  }
+
+  const { body } = await httpsGet(assetUrl, { "User-Agent": "GetFonts-Panel" });
+
+  const safeVersion = String(version || "latest").replace(/[^a-zA-Z0-9._-]/g, "_");
+  const downloadsDir = path.join(os.homedir(), "Downloads");
+  if (!fs.existsSync(downloadsDir)) fs.mkdirSync(downloadsDir, { recursive: true });
+  const outPath = path.join(downloadsDir, `GetFonts-${safeVersion}.zxp`);
+  fs.writeFileSync(outPath, body);
+  return { ok: true, path: outPath };
+}
+
 const server = http.createServer((req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
 
   const url = new URL(req.url, `http://localhost:${PORT}`);
-  if (url.pathname !== "/install") {
-    res.writeHead(404);
-    res.end();
+
+  const sendJson = (promise) => {
+    promise
+      .then((result) => {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(result));
+      })
+      .catch((err) => {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: err.message }));
+      });
+  };
+
+  if (url.pathname === "/install") {
+    const family = url.searchParams.get("family");
+    const style = url.searchParams.get("style") || "";
+    if (!family) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: false, error: "Missing ?family= param" }));
+      return;
+    }
+    sendJson(installFont(family, style));
     return;
   }
 
-  const family = url.searchParams.get("family");
-  const style = url.searchParams.get("style") || "";
-  if (!family) {
-    res.writeHead(400, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ ok: false, error: "Missing ?family= param" }));
+  if (url.pathname === "/download-update") {
+    const assetUrl = url.searchParams.get("url");
+    const version = url.searchParams.get("version") || "";
+    if (!assetUrl) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: false, error: "Missing ?url= param" }));
+      return;
+    }
+    sendJson(downloadUpdate(assetUrl, version));
     return;
   }
 
-  installFont(family, style)
-    .then((result) => {
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify(result));
-    })
-    .catch((err) => {
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ ok: false, error: err.message }));
-    });
+  res.writeHead(404);
+  res.end();
 });
 
 server.on("error", (err) => {

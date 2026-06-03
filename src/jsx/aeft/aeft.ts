@@ -175,6 +175,45 @@ export const openFontFile = (filePath: string): { ok: boolean; error?: string } 
 };
 
 /**
+ * Open a downloaded .zxp with the OS default handler so the user's registered
+ * ZXP installer (Anastasiy's Extension Manager / ZXPInstaller / UPIA) takes over.
+ * Mirrors openFontFile — the OS hands the file to whatever is associated with it.
+ */
+export const openDownloadedFile = (filePath: string): { ok: boolean; error?: string } => {
+  try {
+    //@ts-ignore
+    const isWin = String($.os).toLowerCase().indexOf("win") > -1;
+    if (isWin) {
+      system.callSystem(`start "" "${filePath}"`);
+    } else {
+      system.callSystem(`open "${filePath}"`);
+    }
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: String(e.message || e) };
+  }
+};
+
+/**
+ * Reveal a file in Finder (macOS) / Explorer (Windows). Fallback for when no
+ * ZXP installer is associated, so the user can locate and run the download manually.
+ */
+export const revealFile = (filePath: string): { ok: boolean; error?: string } => {
+  try {
+    //@ts-ignore
+    const isWin = String($.os).toLowerCase().indexOf("win") > -1;
+    if (isWin) {
+      system.callSystem(`explorer /select,"${filePath}"`);
+    } else {
+      system.callSystem(`open -R "${filePath}"`);
+    }
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: String(e.message || e) };
+  }
+};
+
+/**
  * Write a base64-encoded font file to the system temp directory.
  * The panel cannot write files directly (Chromium sandbox), so we do it here.
  */

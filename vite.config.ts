@@ -5,6 +5,7 @@ import react from "@vitejs/plugin-react";
 
 import { cep, CepOptions, runAction } from "vite-cep-plugin";
 import cepConfig from "./cep.config";
+import pkg from "./package.json";
 import path from "path";
 import { extendscriptConfig } from "./vite.es.config";
 
@@ -50,6 +51,11 @@ export default defineConfig({
   plugins: [react(), cep(config), fixManifestIcons(outDir), copyServer(outDir)],
   resolve: {
     alias: [{ find: "@esTypes", replacement: path.resolve(__dirname, "src") }],
+  },
+  define: {
+    // Single source of truth: package.json version, baked in at build time.
+    // Drives the update-check banner. Also feeds cep.config.ts -> manifest.xml.
+    __APP_VERSION__: JSON.stringify(pkg.version),
   },
   root,
   clearScreen: false,

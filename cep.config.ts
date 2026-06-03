@@ -34,7 +34,7 @@ const config: CEP_Config = {
   zxp: {
     country: "US",
     province: "CA",
-    org: "Aviram V",
+    org: "AviramV",
     password: "password",
     tsa: [
       "http://timestamp.digicert.com/",

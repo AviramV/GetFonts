@@ -89,7 +89,12 @@ export default defineConfig({
 function fixManifestIcons(outDir: string): Plugin {
   return {
     name: "fix-manifest-icons",
-    closeBundle() {
+    // Run as a "pre" writeBundle hook so this fix lands BEFORE vite-cep-plugin
+    // signs/zips the folder (its signing runs in writeBundle; closeBundle would be too late
+    // for the .zxp). Rollup runs all writeBundle hooks before any closeBundle hook.
+    writeBundle: {
+      order: "pre",
+      handler() {
       const manifestPath = path.join(outDir, "CSXS", "manifest.xml");
       if (!fs.existsSync(manifestPath)) return;
       let xml = fs.readFileSync(manifestPath, "utf8");
@@ -98,6 +103,7 @@ function fixManifestIcons(outDir: string): Plugin {
         "<Icons/>"
       );
       fs.writeFileSync(manifestPath, xml);
+      },
     },
   };
 }
@@ -105,11 +111,15 @@ function fixManifestIcons(outDir: string): Plugin {
 function copyServer(outDir: string): Plugin {
   return {
     name: "copy-server",
-    closeBundle() {
-      const src = path.resolve(__dirname, "src/server/server.cjs");
-      const destDir = path.join(outDir, "server");
-      if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
-      fs.copyFileSync(src, path.join(destDir, "server.cjs"));
+    // "pre" writeBundle so server.cjs is in place before vite-cep-plugin signs the .zxp.
+    writeBundle: {
+      order: "pre",
+      handler() {
+        const src = path.resolve(__dirname, "src/server/server.cjs");
+        const destDir = path.join(outDir, "server");
+        if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+        fs.copyFileSync(src, path.join(destDir, "server.cjs"));
+      },
     },
   };
 }

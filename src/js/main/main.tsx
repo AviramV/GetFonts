@@ -114,7 +114,10 @@ export const App = () => {
   return (
     <div className="app" style={{ backgroundColor: bgColor }}>
       <header className="app-header">
-        <h1>Get Fonts</h1>
+        <div className="app-title">
+          <h1>Get Fonts</h1>
+          <span className="app-version">v{__APP_VERSION__}</span>
+        </div>
         <p className="subtitle">Detect and install missing fonts in your project</p>
       </header>
 

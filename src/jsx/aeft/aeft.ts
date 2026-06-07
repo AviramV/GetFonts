@@ -39,7 +39,7 @@ export const getMissingFonts = (): GetMissingFontsResult => {
 
     // Early exit — no missing fonts
     if (missingFontNames.length === 0) {
-      return { ok: true, fonts: [] };
+      return writeScanResult([]);
     }
 
     // Build a set of missing font family names for the targeted location scan
@@ -67,10 +67,65 @@ export const getMissingFonts = (): GetMissingFontsResult => {
       });
     }
 
-    return { ok: true, fonts };
+    return writeScanResult(fonts);
   } catch (e: any) {
     return { ok: false, error: String(e.message || e) };
   }
+};
+
+/**
+ * Serialize the scan result to a UTF-8 temp file and return its path.
+ *
+ * The result is NOT returned through evalScript directly: it contains heavy
+ * non-ASCII content (`›`, arrows, curly quotes) that CEP's evalScript return
+ * channel corrupts/truncates, which breaks JSON.parse in the panel. Writing a
+ * UTF-8 file and handing back only the (ASCII) path sidesteps that entirely —
+ * the panel reads + parses the file via Node fs.
+ */
+const writeScanResult = (fonts: MissingFont[]): GetMissingFontsResult => {
+  try {
+    // Escape all non-ASCII to \uXXXX so the payload is pure ASCII. This lets us write
+    // with BINARY encoding (byte-per-char, the only File.write mode that's reliable in
+    // AE's ExtendScript — UTF-8 write mode silently fails here). The panel's JSON.parse
+    // decodes the escapes back to the real characters (›, arrows, curly quotes, …).
+    const json = toAsciiJson(JSON.stringify(fonts));
+    //@ts-ignore — Folder/File are ExtendScript globals
+    const tempDir = Folder.temp.fsName as string;
+    //@ts-ignore
+    const outFile = new File(tempDir + "/getfonts-scan.json");
+    //@ts-ignore — content is pure ASCII, so one byte per char is exact
+    outFile.encoding = "BINARY";
+    if (!outFile.open("w")) {
+      return { ok: false, error: "Cannot open temp file: " + String(outFile.error) };
+    }
+    const wroteOk = outFile.write(json);
+    outFile.close();
+    if (!wroteOk) {
+      return {
+        ok: false,
+        error: "Failed writing scan result (" + json.length + " chars): " + String(outFile.error),
+      };
+    }
+    return { ok: true, path: outFile.fsName };
+  } catch (e: any) {
+    return { ok: false, error: String(e.message || e) };
+  }
+};
+
+/** Replace every char above U+007F with its \uXXXX JSON escape, yielding pure ASCII. */
+const toAsciiJson = (s: string): string => {
+  let out = "";
+  for (let i = 0; i < s.length; i++) {
+    const code = s.charCodeAt(i);
+    if (code > 127) {
+      let hex = code.toString(16);
+      while (hex.length < 4) hex = "0" + hex;
+      out += "\\u" + hex;
+    } else {
+      out += s.charAt(i);
+    }
+  }
+  return out;
 };
 
 /**

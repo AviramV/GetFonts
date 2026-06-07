@@ -47,7 +47,15 @@ export const App = () => {
         setFonts([]);
         return;
       }
-      const items: FontItem[] = result.fonts.map((f) => ({ ...f, status: "missing" }));
+      // The font list is written to a UTF-8 temp file by ExtendScript (its non-ASCII
+      // content doesn't survive CEP's evalScript return channel). Read + parse it here
+      // via Node fs. Strip a possible BOM so JSON.parse doesn't choke on it.
+      const req = (window as any).require as NodeRequire | undefined;
+      if (!req) throw new Error("Node fs unavailable — cannot read scan result.");
+      const fs = req("fs") as typeof import("fs");
+      const raw = fs.readFileSync(result.path, "utf8").replace(/^\uFEFF/, "");
+      const fonts: MissingFont[] = JSON.parse(raw);
+      const items: FontItem[] = fonts.map((f) => ({ ...f, status: "missing" }));
       setFonts(items);
       if (items.length === 0) {
         setStatus("No missing fonts found.");

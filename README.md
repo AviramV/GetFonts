@@ -6,7 +6,7 @@ Missing fonts in your project can be easy to miss, a pain to deal with, and a ha
 
 ## Features
 
-- **Project Scan** — lists every missing or substituted font in the current project, and tells you which comps use it.
+- **Project Scan** — lists the fonts genuinely missing in the current project, and tells you which comps use each. Fonts that After Effects flags but are actually installed (often under a slightly different name) are filtered out, so you don't chase false positives.
 - **Install all** — queues every missing font and attempts to directly install them in sequence.
 - **Selective Install** — downloads the font and hands it to your OS font installer (Font Book on macOS, the font installer on Windows). If a font can't be installed automatically, the panel links you to the source instead.
 - **Find online** – direct link to the fonts' web page (new browser tab).
@@ -15,7 +15,7 @@ Missing fonts in your project can be easy to miss, a pain to deal with, and a ha
 
 ## Requirements
 
-- Adobe After Effects 17.0 or newer (CC 2020+).
+- Adobe After Effects 24.0 or newer (2024+). Detection relies on the scripting font APIs (`app.fonts`) introduced in AE 24.0.
 - macOS or Windows.
 
 ## Installation

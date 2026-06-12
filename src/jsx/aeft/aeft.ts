@@ -4,11 +4,18 @@
 import type { MissingFont, GetMissingFontsResult } from "../../shared/types";
 
 /**
- * Detects missing/substituted fonts in the open AE project.
+ * Detects the fonts that are genuinely missing in the open project.
  *
- * Primary path: app.fonts.missingOrSubstitutedFonts (AE 22+, fast — no layer traversal).
- * Fallback: full layer scan checking textDoc.fontLocation === "" (all AE versions).
- * After getting the font list, runs a targeted scan to find which comp/layer uses each.
+ * Source: app.fonts.missingOrSubstitutedFonts (deduped by family+style). AE also
+ * lists fonts here that are actually installed and render fine — it just keeps a
+ * stale substitution record alongside them, typically because of a duplicate
+ * PostScript name. Such a font's family+style returns BOTH an installed
+ * (isSubstitute:false) AND a substitute (isSubstitute:true) instance from
+ * getFontsByFamilyNameAndStyleName; those are NOT problems and are dropped (the
+ * "both" rule). The rest are genuinely missing.
+ *
+ * Locations ("Comp › Layer") come from one cheap pass over text layers, matched by
+ * family+style (so e.g. "Geist Medium" never lands on a "Geist SemiBold" layer).
  */
 export const getMissingFonts = (): GetMissingFontsResult => {
   try {
@@ -16,57 +23,40 @@ export const getMissingFonts = (): GetMissingFontsResult => {
       return { ok: false, error: "No project is open." };
     }
 
-    let missingFontNames: { name: string; style: string; postScriptName: string }[] = [];
-
-    // Primary: native AE API (AE 22+)
+    let nm: any[];
     try {
       //@ts-ignore — app.fonts may not be typed in older types-for-adobe
-      const nativeMissing: any[] = app.fonts.missingOrSubstitutedFonts;
-      if (Array.isArray(nativeMissing)) {
-        for (let i = 0; i < nativeMissing.length; i++) {
-          const f = nativeMissing[i];
-          missingFontNames.push({
-            name: String(f.familyName || f.name || ""),
-            style: String(f.styleName || ""),
-            postScriptName: String(f.postScriptName || ""),
-          });
-        }
-      }
+      nm = app.fonts.missingOrSubstitutedFonts;
     } catch (_) {
-      // Fallback: scan all text layers for empty fontLocation
-      missingFontNames = scanLayersForMissingFonts();
+      nm = [];
+    }
+    if (!nm || nm.length === undefined) nm = [];
+
+    const installed = buildInstalledFontIndex();
+
+    const byKey: { [key: string]: MissingFont } = {};
+    const order: string[] = [];
+    for (let i = 0; i < nm.length; i++) {
+      const f = nm[i];
+      const family = String(f.familyName || "");
+      const style = String(f.styleName || "");
+      const key = normalizeFontKey(family, style);
+      if (byKey[key]) continue;
+      // The font is genuinely available if its (normalized) family+style is present
+      // in the system's installed-fonts list — whether under the same name or a
+      // different one (e.g. project "WixMadeforText" vs installed "Wix Madefor Text").
+      // Such fonts are flagged only as stale substitution records; skip them.
+      if (installed[key]) continue;
+      byKey[key] = { name: family, style: style, postScriptName: String(f.postScriptName || ""), locations: [] };
+      order.push(key);
     }
 
-    // Early exit — no missing fonts
-    if (missingFontNames.length === 0) {
-      return writeScanResult([]);
-    }
+    if (order.length === 0) return writeScanResult([]);
 
-    // Build a set of missing font family names for the targeted location scan
-    const missingSet: { [key: string]: boolean } = {};
-    for (let i = 0; i < missingFontNames.length; i++) {
-      missingSet[missingFontNames[i].name.toLowerCase()] = true;
-    }
+    attachLocations(byKey);
 
-    // Map: fontName → locations[]
-    const locationMap = buildLocationMap(missingSet);
-
-    // Deduplicate by name+style (AE can return the same font entry multiple times)
-    const seen: { [key: string]: boolean } = {};
     const fonts: MissingFont[] = [];
-    for (let i = 0; i < missingFontNames.length; i++) {
-      const f = missingFontNames[i];
-      const dedupKey = (f.name + "|" + f.style).toLowerCase();
-      if (seen[dedupKey]) continue;
-      seen[dedupKey] = true;
-      fonts.push({
-        name: f.name,
-        style: f.style,
-        postScriptName: f.postScriptName,
-        locations: locationMap[f.name.toLowerCase()] || [],
-      });
-    }
-
+    for (let i = 0; i < order.length; i++) fonts.push(byKey[order[i]]);
     return writeScanResult(fonts);
   } catch (e: any) {
     return { ok: false, error: String(e.message || e) };
@@ -83,16 +73,33 @@ export const getMissingFonts = (): GetMissingFontsResult => {
  * the panel reads + parses the file via Node fs.
  */
 const writeScanResult = (fonts: MissingFont[]): GetMissingFontsResult => {
+  return writeAsciiJsonFile(fonts, "getfonts-scan.json");
+};
+
+/**
+ * Serialize a value to a pure-ASCII JSON temp file and return its path.
+ *
+ * The result is NOT returned through evalScript directly: it can contain heavy
+ * non-ASCII content (`›`, arrows, curly quotes, native font names) that CEP's
+ * evalScript return channel corrupts/truncates, which breaks JSON.parse in the
+ * panel. Writing a file and handing back only the (ASCII) path sidesteps that —
+ * the panel reads + parses the file via Node fs.
+ *
+ * Every char above U+007F is escaped to \uXXXX (see toAsciiJson) so the payload
+ * is pure ASCII; that lets us write with BINARY encoding (byte-per-char, the
+ * only File.write mode reliable in AE's ExtendScript — UTF-8 write silently
+ * fails here). The panel's JSON.parse decodes the escapes back to real chars.
+ */
+const writeAsciiJsonFile = (
+  value: any,
+  fileName: string
+): { ok: true; path: string } | { ok: false; error: string } => {
   try {
-    // Escape all non-ASCII to \uXXXX so the payload is pure ASCII. This lets us write
-    // with BINARY encoding (byte-per-char, the only File.write mode that's reliable in
-    // AE's ExtendScript — UTF-8 write mode silently fails here). The panel's JSON.parse
-    // decodes the escapes back to the real characters (›, arrows, curly quotes, …).
-    const json = toAsciiJson(JSON.stringify(fonts));
+    const json = toAsciiJson(JSON.stringify(value));
     //@ts-ignore — Folder/File are ExtendScript globals
     const tempDir = Folder.temp.fsName as string;
     //@ts-ignore
-    const outFile = new File(tempDir + "/getfonts-scan.json");
+    const outFile = new File(tempDir + "/" + fileName);
     //@ts-ignore — content is pure ASCII, so one byte per char is exact
     outFile.encoding = "BINARY";
     if (!outFile.open("w")) {
@@ -103,7 +110,7 @@ const writeScanResult = (fonts: MissingFont[]): GetMissingFontsResult => {
     if (!wroteOk) {
       return {
         ok: false,
-        error: "Failed writing scan result (" + json.length + " chars): " + String(outFile.error),
+        error: "Failed writing result (" + json.length + " chars): " + String(outFile.error),
       };
     }
     return { ok: true, path: outFile.fsName };
@@ -129,51 +136,55 @@ const toAsciiJson = (s: string): string => {
 };
 
 /**
- * Full layer scan fallback for AE < 22.
- * Returns font names with empty fontLocation (missing).
+ * Normalize a family+style pair to a comparison key: lowercase and strip
+ * everything but [a-z0-9], collapsing a blank/Regular style to "regular". Used to
+ * dedupe flagged fonts and to match a layer's font to a flagged font tolerant of
+ * case/spacing differences (e.g. "SemiBold" vs "Semibold").
  */
-const scanLayersForMissingFonts = (): { name: string; style: string; postScriptName: string }[] => {
-  const seen: { [key: string]: boolean } = {};
-  const result: { name: string; style: string; postScriptName: string }[] = [];
-
-  const items = app.project.items;
-  for (let i = 1; i <= items.length; i++) {
-    const item = items[i];
-    //@ts-ignore
-    if (!(item instanceof CompItem)) continue;
-    const comp = item as CompItem;
-
-    for (let j = 1; j <= comp.numLayers; j++) {
-      const layer = comp.layer(j);
-      //@ts-ignore
-      if (!(layer instanceof TextLayer)) continue;
-
-      try {
-        //@ts-ignore
-        const textDoc = (layer as TextLayer).sourceText.value as TextDocument;
-        const fontFamily = String(textDoc.fontFamily || "");
-        const fontLocation = String(textDoc.fontLocation || "");
-
-        if (fontFamily && !fontLocation && !seen[fontFamily.toLowerCase()]) {
-          seen[fontFamily.toLowerCase()] = true;
-          result.push({ name: fontFamily, style: "", postScriptName: "" });
-        }
-      } catch (_) {
-        // skip unreadable layers
-      }
-    }
-  }
-  return result;
+const normalizeFontKey = (family: string, style: string): string => {
+  const clean = (s: string): string => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  let st = clean(style);
+  if (st === "" || st === "regular" || st === "normal" || st === "roman") st = "regular";
+  return clean(family) + "|" + st;
 };
 
 /**
- * Targeted scan: for each comp/layer, record location only for known-missing font names.
+ * Set of normalized family+style keys for every font actually installed on the
+ * system (app.fonts.allFonts, excluding substitute placeholders). A flagged font
+ * whose key is present here is genuinely available — possibly under a different
+ * name than the project references (e.g. "Wix Madefor Text" vs "WixMadeforText") —
+ * so it's only a stale substitution record, not a real problem. AE 24+;
+ * allFonts is an Array of Arrays grouped by family.
  */
-const buildLocationMap = (
-  missingSet: { [key: string]: boolean }
-): { [key: string]: string[] } => {
-  const map: { [key: string]: string[] } = {};
+const buildInstalledFontIndex = (): { [key: string]: boolean } => {
+  const idx: { [key: string]: boolean } = {};
+  try {
+    //@ts-ignore — app.fonts may not be typed in older types-for-adobe
+    const families: any[] = app.fonts.allFonts;
+    if (!families || families.length === undefined) return idx;
+    for (let i = 0; i < families.length; i++) {
+      const group = families[i];
+      // Each entry is normally an array of FontObjects; tolerate a bare FontObject.
+      const list: any[] = group && group.length !== undefined ? group : [group];
+      for (let j = 0; j < list.length; j++) {
+        const f = list[j];
+        if (!f || f.isSubstitute === true) continue;
+        idx[normalizeFontKey(String(f.familyName || ""), String(f.styleName || ""))] = true;
+      }
+    }
+  } catch (_) {
+    // AE < 24 / no font API — empty index (nothing excluded).
+  }
+  return idx;
+};
 
+/**
+ * Attach "Comp › Layer" locations to each missing font via one cheap pass over the
+ * project's text layers, matched by normalized family+style (whole-doc font props,
+ * no per-character scan). A layer that uses a different weight of the same family
+ * therefore won't be attributed to the wrong entry.
+ */
+const attachLocations = (byKey: { [key: string]: MissingFont }): void => {
   const items = app.project.items;
   for (let i = 1; i <= items.length; i++) {
     const item = items[i];
@@ -185,29 +196,23 @@ const buildLocationMap = (
       const layer = comp.layer(j);
       //@ts-ignore
       if (!(layer instanceof TextLayer)) continue;
-
       try {
         //@ts-ignore
-        const textDoc = (layer as TextLayer).sourceText.value as TextDocument;
-        const fontFamily = String(textDoc.fontFamily || "");
-        const key = fontFamily.toLowerCase();
-
-        if (fontFamily && missingSet[key]) {
-          const label = `${comp.name} › ${layer.name}`;
-          if (!map[key]) map[key] = [];
-          // deduplicate
-          let exists = false;
-          for (let k = 0; k < map[key].length; k++) {
-            if (map[key][k] === label) { exists = true; break; }
-          }
-          if (!exists) map[key].push(label);
+        const doc = (layer as TextLayer).sourceText.value as any;
+        const key = normalizeFontKey(String(doc.fontFamily || ""), String(doc.fontStyle || ""));
+        const entry = byKey[key];
+        if (!entry) continue;
+        const label = comp.name + " › " + layer.name;
+        let exists = false;
+        for (let k = 0; k < entry.locations.length; k++) {
+          if (entry.locations[k] === label) { exists = true; break; }
         }
+        if (!exists) entry.locations.push(label);
       } catch (_) {
-        // skip
+        // skip unreadable/locked layers
       }
     }
   }
-  return map;
 };
 
 /**

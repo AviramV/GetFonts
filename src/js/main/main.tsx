@@ -49,19 +49,11 @@ export const App = () => {
       }
       // The font list is written to a UTF-8 temp file by ExtendScript (its non-ASCII
       // content doesn't survive CEP's evalScript return channel). Read + parse it here
-      // via Node fs. Strip a possible BOM so JSON.parse doesn't choke on it.
-      const req = (window as any).require as NodeRequire | undefined;
-      if (!req) throw new Error("Node fs unavailable — cannot read scan result.");
-      const fs = req("fs") as typeof import("fs");
-      const raw = fs.readFileSync(result.path, "utf8").replace(/^\uFEFF/, "");
-      const fonts: MissingFont[] = JSON.parse(raw);
-      const items: FontItem[] = fonts.map((f) => ({ ...f, status: "missing" }));
+      // via Node fs.
+      const fonts = readBridgeJson<MissingFont[]>(result.path);
+      const items: FontItem[] = fonts.map((f) => ({ ...f, status: "missing" as const }));
       setFonts(items);
-      if (items.length === 0) {
-        setStatus("No missing fonts found.");
-      } else {
-        setStatus(`Found ${items.length} missing font${items.length === 1 ? "" : "s"}.`);
-      }
+      setStatus(summarizeScan(items));
     } catch (e: any) {
       setStatus(`Error: ${String(e)}`);
     } finally {
@@ -168,6 +160,25 @@ export const App = () => {
     </div>
   );
 };
+
+/**
+ * Read a JSON payload that ExtendScript wrote to a temp file (see writeAsciiJsonFile
+ * in aeft.ts — its non-ASCII content can't survive CEP's evalScript return channel).
+ * Reads via Node fs and strips a possible BOM so JSON.parse doesn't choke.
+ */
+function readBridgeJson<T>(path: string): T {
+  const req = (window as any).require as NodeRequire | undefined;
+  if (!req) throw new Error("Node fs unavailable — cannot read bridge result.");
+  const fs = req("fs") as typeof import("fs");
+  const raw = fs.readFileSync(path, "utf8").replace(/^﻿/, "");
+  return JSON.parse(raw) as T;
+}
+
+/** Build the post-scan status line. */
+function summarizeScan(items: FontItem[]): string {
+  if (items.length === 0) return "No missing fonts found.";
+  return `Found ${items.length} missing font${items.length === 1 ? "" : "s"}.`;
+}
 
 /**
  * Determine the best URL to open for a font:

@@ -55,9 +55,16 @@ async function installFont(fontName, fontStyle) {
   const fileUrl = match[1];
   const { body: fontBuffer } = await httpsGet(fileUrl, { "User-Agent": GFONTS_UA });
 
+  // Include the style in the filename so each weight is a distinct file.
+  // Font Book copies the source file into ~/Library/Fonts keeping its name, then
+  // treats a same-named file already there as "already installed" (offering only
+  // Skip) — even when the actual typeface differs. Saving every weight as the bare
+  // family name (e.g. "Geist.ttf") collides across weights and blocks installing
+  // anything but the first one.
   const ext = path.extname(new URL(fileUrl).pathname) || ".ttf";
   const safeName = fontName.replace(/[^a-zA-Z0-9_-]/g, "_");
-  const outPath = path.join(os.tmpdir(), `${safeName}${ext}`);
+  const safeStyle = (fontStyle || "Regular").trim().replace(/[^a-zA-Z0-9_-]/g, "_");
+  const outPath = path.join(os.tmpdir(), `${safeName}-${safeStyle}${ext}`);
   fs.writeFileSync(outPath, fontBuffer);
   return { ok: true, path: outPath };
 }
